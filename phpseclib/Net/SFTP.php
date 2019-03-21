@@ -646,27 +646,7 @@ class SFTP extends SSH2
      * @param int $status
      * @access private
      */
-    private function logError($response, $status = -1)
-    {
-        if ($status == -1) {
-            if (strlen($response) < 4) {
-                return;
-            }
-            extract(unpack('Nstatus', Strings::shift($response, 4)));
-            /** @var integer $status */
-        }
-
-        $error = $this->status_codes[$status];
-
-        if ($this->version > 2 || strlen($response) < 4) {
-            extract(unpack('Nlength', Strings::shift($response, 4)));
-            /** @var integer $length */
-
-            $this->sftp_errors[] = $error . ': ' . Strings::shift($response, $length);
-        } else {
-            $this->sftp_errors[] = $error;
-        }
-    }
+    
 
     /**
      * Canonicalize the Server-Side Path Name
@@ -826,30 +806,7 @@ class SFTP extends SSH2
      * @return mixed
      * @access private
      */
-    private function nlist_helper($dir, $recursive, $relativeDir)
-    {
-        $files = $this->readlist($dir, false);
-
-        if (!$recursive || $files === false) {
-            return $files;
-        }
-
-        $result = [];
-        foreach ($files as $value) {
-            if ($value == '.' || $value == '..') {
-                $result[] = $relativeDir . $value;
-                continue;
-            }
-            if (is_array($this->query_stat_cache($this->realpath($dir . '/' . $value)))) {
-                $temp = $this->nlist_helper($dir . '/' . $value, true, $relativeDir . $value . '/');
-                $result = array_merge($result, $temp);
-            } else {
-                $result[] = $relativeDir . $value;
-            }
-        }
-
-        return $result;
-    }
+    
 
     /**
      * Returns a detailed list of files in the given directory
@@ -904,125 +861,7 @@ class SFTP extends SSH2
      * @throws \UnexpectedValueException on receipt of unexpected packets
      * @access private
      */
-    private function readlist($dir, $raw = true)
-    {
-        if (!($this->bitmap & SSH2::MASK_LOGIN)) {
-            return false;
-        }
-
-        $dir = $this->realpath($dir . '/');
-        if ($dir === false) {
-            return false;
-        }
-
-        // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-8.1.2
-        if (!$this->send_sftp_packet(NET_SFTP_OPENDIR, pack('Na*', strlen($dir), $dir))) {
-            return false;
-        }
-
-        $response = $this->get_sftp_packet();
-        switch ($this->packet_type) {
-            case NET_SFTP_HANDLE:
-                // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-9.2
-                // since 'handle' is the last field in the SSH_FXP_HANDLE packet, we'll just remove the first four bytes that
-                // represent the length of the string and leave it at that
-                $handle = substr($response, 4);
-                break;
-            case NET_SFTP_STATUS:
-                // presumably SSH_FX_NO_SUCH_FILE or SSH_FX_PERMISSION_DENIED
-                $this->logError($response);
-                return false;
-            default:
-                throw new \UnexpectedValueException('Expected NET_SFTP_HANDLE or NET_SFTP_STATUS. '
-                                                  . 'Got packet type: ' . $this->packet_type);
-        }
-
-        $this->update_stat_cache($dir, []);
-
-        $contents = [];
-        while (true) {
-            // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-8.2.2
-            // why multiple SSH_FXP_READDIR packets would be sent when the response to a single one can span arbitrarily many
-            // SSH_MSG_CHANNEL_DATA messages is not known to me.
-            if (!$this->send_sftp_packet(NET_SFTP_READDIR, pack('Na*', strlen($handle), $handle))) {
-                return false;
-            }
-
-            $response = $this->get_sftp_packet();
-            switch ($this->packet_type) {
-                case NET_SFTP_NAME:
-                    if (strlen($response) < 4) {
-                        return false;
-                    }
-                    extract(unpack('Ncount', Strings::shift($response, 4)));
-                    /** @var integer $count */
-
-                    for ($i = 0; $i < $count; $i++) {
-                        if (strlen($response) < 4) {
-                            return false;
-                        }
-                        extract(unpack('Nlength', Strings::shift($response, 4)));
-                        /** @var integer $length */
-
-                        $shortname = Strings::shift($response, $length);
-                        if (strlen($response) < 4) {
-                            return false;
-                        }
-                        extract(unpack('Nlength', Strings::shift($response, 4)));
-                        /** @var integer $length */
-
-                        $longname = Strings::shift($response, $length);
-                        $attributes = $this->parseAttributes($response);
-                        if (!isset($attributes['type'])) {
-                            $fileType = $this->parseLongname($longname);
-                            if ($fileType) {
-                                $attributes['type'] = $fileType;
-                            }
-                        }
-                        $contents[$shortname] = $attributes + ['filename' => $shortname];
-
-                        if (isset($attributes['type']) && $attributes['type'] == NET_SFTP_TYPE_DIRECTORY && ($shortname != '.' && $shortname != '..')) {
-                            $this->update_stat_cache($dir . '/' . $shortname, []);
-                        } else {
-                            if ($shortname == '..') {
-                                $temp = $this->realpath($dir . '/..') . '/.';
-                            } else {
-                                $temp = $dir . '/' . $shortname;
-                            }
-                            $this->update_stat_cache($temp, (object) ['lstat' => $attributes]);
-                        }
-                        // SFTPv6 has an optional boolean end-of-list field, but we'll ignore that, since the
-                        // final SSH_FXP_STATUS packet should tell us that, already.
-                    }
-                    break;
-                case NET_SFTP_STATUS:
-                    if (strlen($response) < 4) {
-                        return false;
-                    }
-                    extract(unpack('Nstatus', Strings::shift($response, 4)));
-                    /** @var integer $status */
-
-                    if ($status != NET_SFTP_STATUS_EOF) {
-                        $this->logError($response, $status);
-                        return false;
-                    }
-                    break 2;
-                default:
-                    throw new \UnexpectedValueException('Expected NET_SFTP_NAME or NET_SFTP_STATUS. '
-                                                      . 'Got packet type: ' . $this->packet_type);
-            }
-        }
-
-        if (!$this->close_handle($handle)) {
-            return false;
-        }
-
-        if (count($this->sortOptions)) {
-            uasort($contents, [&$this, 'comparator']);
-        }
-
-        return $raw ? $contents : array_keys($contents);
-    }
+    
 
     /**
      * Compares two rawlist entries using parameters set by setListOrder()
@@ -1034,59 +873,7 @@ class SFTP extends SSH2
      * @return int
      * @access private
      */
-    private function comparator($a, $b)
-    {
-        switch (true) {
-            case $a['filename'] === '.' || $b['filename'] === '.':
-                if ($a['filename'] === $b['filename']) {
-                    return 0;
-                }
-                return $a['filename'] === '.' ? -1 : 1;
-            case $a['filename'] === '..' || $b['filename'] === '..':
-                if ($a['filename'] === $b['filename']) {
-                    return 0;
-                }
-                return $a['filename'] === '..' ? -1 : 1;
-            case isset($a['type']) && $a['type'] === NET_SFTP_TYPE_DIRECTORY:
-                if (!isset($b['type'])) {
-                    return 1;
-                }
-                if ($b['type'] !== $a['type']) {
-                    return -1;
-                }
-                break;
-            case isset($b['type']) && $b['type'] === NET_SFTP_TYPE_DIRECTORY:
-                return 1;
-        }
-        foreach ($this->sortOptions as $sort => $order) {
-            if (!isset($a[$sort]) || !isset($b[$sort])) {
-                if (isset($a[$sort])) {
-                    return -1;
-                }
-                if (isset($b[$sort])) {
-                    return 1;
-                }
-                return 0;
-            }
-            switch ($sort) {
-                case 'filename':
-                    $result = strcasecmp($a['filename'], $b['filename']);
-                    if ($result) {
-                        return $order === SORT_DESC ? -$result : $result;
-                    }
-                    break;
-                case 'permissions':
-                case 'mode':
-                    $a[$sort]&= 07777;
-                    $b[$sort]&= 07777;
-                default:
-                    if ($a[$sort] === $b[$sort]) {
-                        break;
-                    }
-                    return $order === SORT_ASC ? $a[$sort] - $b[$sort] : $b[$sort] - $a[$sort];
-            }
-        }
-    }
+    
 
     /**
      * Defines how nlist() and rawlist() will be sorted - if at all.
@@ -1153,42 +940,7 @@ class SFTP extends SSH2
      * @param mixed $value
      * @access private
      */
-    private function update_stat_cache($path, $value)
-    {
-        if ($this->use_stat_cache === false) {
-            return;
-        }
-
-        // preg_replace('#^/|/(?=/)|/$#', '', $dir) == str_replace('//', '/', trim($path, '/'))
-        $dirs = explode('/', preg_replace('#^/|/(?=/)|/$#', '', $path));
-
-        $temp = &$this->stat_cache;
-        $max = count($dirs) - 1;
-        foreach ($dirs as $i => $dir) {
-            // if $temp is an object that means one of two things.
-            //  1. a file was deleted and changed to a directory behind phpseclib's back
-            //  2. it's a symlink. when lstat is done it's unclear what it's a symlink to
-            if (is_object($temp)) {
-                $temp = [];
-            }
-            if (!isset($temp[$dir])) {
-                $temp[$dir] = [];
-            }
-            if ($i === $max) {
-                if (is_object($temp[$dir]) && is_object($value)) {
-                    if (!isset($value->stat) && isset($temp[$dir]->stat)) {
-                        $value->stat = $temp[$dir]->stat;
-                    }
-                    if (!isset($value->lstat) && isset($temp[$dir]->lstat)) {
-                        $value->lstat = $temp[$dir]->lstat;
-                    }
-                }
-                $temp[$dir] = $value;
-                break;
-            }
-            $temp = &$temp[$dir];
-        }
-    }
+    
 
     /**
      * Remove files / directories from cache
@@ -1197,23 +949,7 @@ class SFTP extends SSH2
      * @return bool
      * @access private
      */
-    private function remove_from_stat_cache($path)
-    {
-        $dirs = explode('/', preg_replace('#^/|/(?=/)|/$#', '', $path));
-
-        $temp = &$this->stat_cache;
-        $max = count($dirs) - 1;
-        foreach ($dirs as $i => $dir) {
-            if ($i === $max) {
-                unset($temp[$dir]);
-                return true;
-            }
-            if (!isset($temp[$dir])) {
-                return false;
-            }
-            $temp = &$temp[$dir];
-        }
-    }
+    
 
     /**
      * Checks cache for path
@@ -1224,19 +960,7 @@ class SFTP extends SSH2
      * @return mixed
      * @access private
      */
-    private function query_stat_cache($path)
-    {
-        $dirs = explode('/', preg_replace('#^/|/(?=/)|/$#', '', $path));
-
-        $temp = &$this->stat_cache;
-        foreach ($dirs as $dir) {
-            if (!isset($temp[$dir])) {
-                return null;
-            }
-            $temp = &$temp[$dir];
-        }
-        return $temp;
-    }
+    
 
     /**
      * Returns general information about a file.
@@ -1372,26 +1096,7 @@ class SFTP extends SSH2
      * @return mixed
      * @access private
      */
-    private function stat_helper($filename, $type)
-    {
-        // SFTPv4+ adds an additional 32-bit integer field - flags - to the following:
-        $packet = pack('Na*', strlen($filename), $filename);
-        if (!$this->send_sftp_packet($type, $packet)) {
-            return false;
-        }
-
-        $response = $this->get_sftp_packet();
-        switch ($this->packet_type) {
-            case NET_SFTP_ATTRS:
-                return $this->parseAttributes($response);
-            case NET_SFTP_STATUS:
-                $this->logError($response);
-                return false;
-        }
-
-        throw new \UnexpectedValueException('Expected NET_SFTP_ATTRS or NET_SFTP_STATUS. '
-                                          . 'Got packet type: ' . $this->packet_type);
-    }
+    
 
     /**
      * Truncates a file to a given length
@@ -1560,58 +1265,7 @@ class SFTP extends SSH2
      * @return bool
      * @access private
      */
-    private function setstat($filename, $attr, $recursive)
-    {
-        if (!($this->bitmap & SSH2::MASK_LOGIN)) {
-            return false;
-        }
-
-        $filename = $this->realpath($filename);
-        if ($filename === false) {
-            return false;
-        }
-
-        $this->remove_from_stat_cache($filename);
-
-        if ($recursive) {
-            $i = 0;
-            $result = $this->setstat_recursive($filename, $attr, $i);
-            $this->read_put_responses($i);
-            return $result;
-        }
-
-        // SFTPv4+ has an additional byte field - type - that would need to be sent, as well. setting it to
-        // SSH_FILEXFER_TYPE_UNKNOWN might work. if not, we'd have to do an SSH_FXP_STAT before doing an SSH_FXP_SETSTAT.
-        if (!$this->send_sftp_packet(NET_SFTP_SETSTAT, pack('Na*a*', strlen($filename), $filename, $attr))) {
-            return false;
-        }
-
-        /*
-         "Because some systems must use separate system calls to set various attributes, it is possible that a failure
-          response will be returned, but yet some of the attributes may be have been successfully modified.  If possible,
-          servers SHOULD avoid this situation; however, clients MUST be aware that this is possible."
-
-          -- http://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-8.6
-        */
-        $response = $this->get_sftp_packet();
-        if ($this->packet_type != NET_SFTP_STATUS) {
-            throw new \UnexpectedValueException('Expected NET_SFTP_STATUS. '
-                                              . 'Got packet type: ' . $this->packet_type);
-        }
-
-        if (strlen($response) < 4) {
-            return false;
-        }
-        extract(unpack('Nstatus', Strings::shift($response, 4)));
-        /** @var integer $status */
-
-        if ($status != NET_SFTP_STATUS_OK) {
-            $this->logError($response, $status);
-            return false;
-        }
-
-        return true;
-    }
+    
 
     /**
      * Recursively sets information on directories on the SFTP server
@@ -1624,66 +1278,7 @@ class SFTP extends SSH2
      * @return bool
      * @access private
      */
-    private function setstat_recursive($path, $attr, &$i)
-    {
-        if (!$this->read_put_responses($i)) {
-            return false;
-        }
-        $i = 0;
-        $entries = $this->readlist($path, true);
-
-        if ($entries === false) {
-            return $this->setstat($path, $attr, false);
-        }
-
-        // normally $entries would have at least . and .. but it might not if the directories
-        // permissions didn't allow reading
-        if (empty($entries)) {
-            return false;
-        }
-
-        unset($entries['.'], $entries['..']);
-        foreach ($entries as $filename => $props) {
-            if (!isset($props['type'])) {
-                return false;
-            }
-
-            $temp = $path . '/' . $filename;
-            if ($props['type'] == NET_SFTP_TYPE_DIRECTORY) {
-                if (!$this->setstat_recursive($temp, $attr, $i)) {
-                    return false;
-                }
-            } else {
-                if (!$this->send_sftp_packet(NET_SFTP_SETSTAT, pack('Na*a*', strlen($temp), $temp, $attr))) {
-                    return false;
-                }
-
-                $i++;
-
-                if ($i >= NET_SFTP_QUEUE_SIZE) {
-                    if (!$this->read_put_responses($i)) {
-                        return false;
-                    }
-                    $i = 0;
-                }
-            }
-        }
-
-        if (!$this->send_sftp_packet(NET_SFTP_SETSTAT, pack('Na*a*', strlen($path), $path, $attr))) {
-            return false;
-        }
-
-        $i++;
-
-        if ($i >= NET_SFTP_QUEUE_SIZE) {
-            if (!$this->read_put_responses($i)) {
-                return false;
-            }
-            $i = 0;
-        }
-
-        return true;
-    }
+    
 
     /**
      * Return the target of a symbolic link
@@ -1826,31 +1421,7 @@ class SFTP extends SSH2
      * @return bool
      * @access private
      */
-    private function mkdir_helper($dir, $attr)
-    {
-        if (!$this->send_sftp_packet(NET_SFTP_MKDIR, pack('Na*a*', strlen($dir), $dir, $attr))) {
-            return false;
-        }
-
-        $response = $this->get_sftp_packet();
-        if ($this->packet_type != NET_SFTP_STATUS) {
-            throw new \UnexpectedValueException('Expected NET_SFTP_STATUS. '
-                                              . 'Got packet type: ' . $this->packet_type);
-        }
-
-        if (strlen($response) < 4) {
-            return false;
-        }
-        extract(unpack('Nstatus', Strings::shift($response, 4)));
-        /** @var integer $status */
-
-        if ($status != NET_SFTP_STATUS_OK) {
-            $this->logError($response, $status);
-            return false;
-        }
-
-        return true;
-    }
+    
 
     /**
      * Removes a directory.
@@ -2112,29 +1683,7 @@ class SFTP extends SSH2
      * @throws \UnexpectedValueException on receipt of unexpected packets
      * @access private
      */
-    private function read_put_responses($i)
-    {
-        while ($i--) {
-            $response = $this->get_sftp_packet();
-            if ($this->packet_type != NET_SFTP_STATUS) {
-                throw new \UnexpectedValueException('Expected NET_SFTP_STATUS. '
-                                                  . 'Got packet type: ' . $this->packet_type);
-            }
-
-            if (strlen($response) < 4) {
-                return false;
-            }
-            extract(unpack('Nstatus', Strings::shift($response, 4)));
-            /** @var integer $status */
-
-            if ($status != NET_SFTP_STATUS_OK) {
-                $this->logError($response, $status);
-                break;
-            }
-        }
-
-        return $i < 0;
-    }
+    
 
     /**
      * Close handle
@@ -2144,33 +1693,7 @@ class SFTP extends SSH2
      * @throws \UnexpectedValueException on receipt of unexpected packets
      * @access private
      */
-    private function close_handle($handle)
-    {
-        if (!$this->send_sftp_packet(NET_SFTP_CLOSE, pack('Na*', strlen($handle), $handle))) {
-            return false;
-        }
-
-        // "The client MUST release all resources associated with the handle regardless of the status."
-        //  -- http://tools.ietf.org/html/draft-ietf-secsh-filexfer-13#section-8.1.3
-        $response = $this->get_sftp_packet();
-        if ($this->packet_type != NET_SFTP_STATUS) {
-            throw new \UnexpectedValueException('Expected NET_SFTP_STATUS. '
-                                              . 'Got packet type: ' . $this->packet_type);
-        }
-
-        if (strlen($response) < 4) {
-            return false;
-        }
-        extract(unpack('Nstatus', Strings::shift($response, 4)));
-        /** @var integer $status */
-
-        if ($status != NET_SFTP_STATUS_OK) {
-            $this->logError($response, $status);
-            return false;
-        }
-
-        return true;
-    }
+    
 
     /**
      * Downloads a file from the SFTP server.
@@ -2399,64 +1922,7 @@ class SFTP extends SSH2
      * @return bool
      * @access private
      */
-    private function delete_recursive($path, &$i)
-    {
-        if (!$this->read_put_responses($i)) {
-            return false;
-        }
-        $i = 0;
-        $entries = $this->readlist($path, true);
-
-        // normally $entries would have at least . and .. but it might not if the directories
-        // permissions didn't allow reading
-        if (empty($entries)) {
-            return false;
-        }
-
-        unset($entries['.'], $entries['..']);
-        foreach ($entries as $filename => $props) {
-            if (!isset($props['type'])) {
-                return false;
-            }
-
-            $temp = $path . '/' . $filename;
-            if ($props['type'] == NET_SFTP_TYPE_DIRECTORY) {
-                if (!$this->delete_recursive($temp, $i)) {
-                    return false;
-                }
-            } else {
-                if (!$this->send_sftp_packet(NET_SFTP_REMOVE, pack('Na*', strlen($temp), $temp))) {
-                    return false;
-                }
-                $this->remove_from_stat_cache($temp);
-
-                $i++;
-
-                if ($i >= NET_SFTP_QUEUE_SIZE) {
-                    if (!$this->read_put_responses($i)) {
-                        return false;
-                    }
-                    $i = 0;
-                }
-            }
-        }
-
-        if (!$this->send_sftp_packet(NET_SFTP_RMDIR, pack('Na*', strlen($path), $path))) {
-            return false;
-        }
-        $this->remove_from_stat_cache($path);
-
-        $i++;
-
-        if ($i >= NET_SFTP_QUEUE_SIZE) {
-            if (!$this->read_put_responses($i)) {
-                return false;
-            }
-            $i = 0;
-        }
-
-        return true;
-    }
+    
 
     /**
      * Checks whether a file or directory exists
@@ -2713,10 +2179,7 @@ class SFTP extends SSH2
      * @return mixed
      * @access private
      */
-    private function get_stat_cache_prop($path, $prop)
-    {
-        return $this->get_xstat_cache_prop($path, $prop, 'stat');
-    }
+    
 
     /**
      * Return an lstat properity
@@ -2728,10 +2191,7 @@ class SFTP extends SSH2
      * @return mixed
      * @access private
      */
-    private function get_lstat_cache_prop($path, $prop)
-    {
-        return $this->get_xstat_cache_prop($path, $prop, 'lstat');
-    }
+    
 
     /**
      * Return a stat or lstat properity
@@ -2744,26 +2204,7 @@ class SFTP extends SSH2
      * @return mixed
      * @access private
      */
-    private function get_xstat_cache_prop($path, $prop, $type)
-    {
-        if ($this->use_stat_cache) {
-            $path = $this->realpath($path);
-
-            $result = $this->query_stat_cache($path);
-
-            if (is_object($result) && isset($result->$type)) {
-                return $result->{$type}[$prop];
-            }
-        }
-
-        $result = $this->$type($path);
-
-        if ($result === false || !isset($result[$prop])) {
-            return false;
-        }
-
-        return $result[$prop];
-    }
+    
 
     /**
      * Renames a file or a directory on the SFTP server
@@ -2828,87 +2269,7 @@ class SFTP extends SSH2
      * @return array
      * @access private
      */
-    private function parseAttributes(&$response)
-    {
-        $attr = [];
-        if (strlen($response) < 4) {
-            //user_error('Malformed file attributes');
-            return [];
-        }
-        extract(unpack('Nflags', Strings::shift($response, 4)));
-        /** @var integer $flags */
-
-        // SFTPv4+ have a type field (a byte) that follows the above flag field
-        foreach ($this->attributes as $key => $value) {
-            switch ($flags & $key) {
-                case NET_SFTP_ATTR_SIZE: // 0x00000001
-                    // The size attribute is defined as an unsigned 64-bit integer.
-                    // The following will use floats on 32-bit platforms, if necessary.
-                    // As can be seen in the BigInteger class, floats are generally
-                    // IEEE 754 binary64 "double precision" on such platforms and
-                    // as such can represent integers of at least 2^50 without loss
-                    // of precision. Interpreted in filesize, 2^50 bytes = 1024 TiB.
-                    $attr['size'] = hexdec(Hex::encode(Strings::shift($response, 8)));
-                    break;
-                case NET_SFTP_ATTR_UIDGID: // 0x00000002 (SFTPv3 only)
-                    if (strlen($response) < 8) {
-                        //user_error('Malformed file attributes');
-                        return $attr;
-                    }
-                    $attr+= unpack('Nuid/Ngid', Strings::shift($response, 8));
-                    break;
-                case NET_SFTP_ATTR_PERMISSIONS: // 0x00000004
-                    if (strlen($response) < 4) {
-                        //user_error('Malformed file attributes');
-                        return $attr;
-                    }
-                    $attr+= unpack('Npermissions', Strings::shift($response, 4));
-                    // mode == permissions; permissions was the original array key and is retained for bc purposes.
-                    // mode was added because that's the more industry standard terminology
-                    $attr+= ['mode' => $attr['permissions']];
-                    $fileType = $this->parseMode($attr['permissions']);
-                    if ($fileType !== false) {
-                        $attr+= ['type' => $fileType];
-                    }
-                    break;
-                case NET_SFTP_ATTR_ACCESSTIME: // 0x00000008
-                    if (strlen($response) < 8) {
-                        //user_error('Malformed file attributes');
-                        return $attr;
-                    }
-                    $attr+= unpack('Natime/Nmtime', Strings::shift($response, 8));
-                    break;
-                case NET_SFTP_ATTR_EXTENDED: // 0x80000000
-                    if (strlen($response) < 4) {
-                        //user_error('Malformed file attributes');
-                        return $attr;
-                    }
-                    extract(unpack('Ncount', Strings::shift($response, 4)));
-                    /** @var integer $count */
-
-                    for ($i = 0; $i < $count; $i++) {
-                        if (strlen($response) < 4) {
-                            //user_error('Malformed file attributes');
-                            return $attr;
-                        }
-                        extract(unpack('Nlength', Strings::shift($response, 4)));
-                        /** @var integer $length */
-
-                        $key = Strings::shift($response, $length);
-
-                        if (strlen($response) < 4) {
-                            //user_error('Malformed file attributes');
-                            return $attr;
-                        }
-                        extract(unpack('Nlength', Strings::shift($response, 4)));
-                        /** @var integer $length */
-
-                        $attr[$key] = Strings::shift($response, $length);
-                    }
-            }
-        }
-        return $attr;
-    }
+    
 
     /**
      * Attempt to identify the file type
@@ -2919,37 +2280,7 @@ class SFTP extends SSH2
      * @return int
      * @access private
      */
-    private function parseMode($mode)
-    {
-        // values come from http://lxr.free-electrons.com/source/include/uapi/linux/stat.h#L12
-        // see, also, http://linux.die.net/man/2/stat
-        switch ($mode & 0170000) {// ie. 1111 0000 0000 0000
-            case 0000000: // no file type specified - figure out the file type using alternative means
-                return false;
-            case 0040000:
-                return NET_SFTP_TYPE_DIRECTORY;
-            case 0100000:
-                return NET_SFTP_TYPE_REGULAR;
-            case 0120000:
-                return NET_SFTP_TYPE_SYMLINK;
-            // new types introduced in SFTPv5+
-            // http://tools.ietf.org/html/draft-ietf-secsh-filexfer-05#section-5.2
-            case 0010000: // named pipe (fifo)
-                return NET_SFTP_TYPE_FIFO;
-            case 0020000: // character special
-                return NET_SFTP_TYPE_CHAR_DEVICE;
-            case 0060000: // block special
-                return NET_SFTP_TYPE_BLOCK_DEVICE;
-            case 0140000: // socket
-                return NET_SFTP_TYPE_SOCKET;
-            case 0160000: // whiteout
-                // "SPECIAL should be used for files that are of
-                //  a known type which cannot be expressed in the protocol"
-                return NET_SFTP_TYPE_SPECIAL;
-            default:
-                return NET_SFTP_TYPE_UNKNOWN;
-        }
-    }
+    
 
     /**
      * Parse Longname
@@ -2966,25 +2297,7 @@ class SFTP extends SSH2
      * @return mixed
      * @access private
      */
-    private function parseLongname($longname)
-    {
-        // http://en.wikipedia.org/wiki/Unix_file_types
-        // http://en.wikipedia.org/wiki/Filesystem_permissions#Notation_of_traditional_Unix_permissions
-        if (preg_match('#^[^/]([r-][w-][xstST-]){3}#', $longname)) {
-            switch ($longname[0]) {
-                case '-':
-                    return NET_SFTP_TYPE_REGULAR;
-                case 'd':
-                    return NET_SFTP_TYPE_DIRECTORY;
-                case 'l':
-                    return NET_SFTP_TYPE_SYMLINK;
-                default:
-                    return NET_SFTP_TYPE_SPECIAL;
-            }
-        }
-
-        return false;
-    }
+    
 
     /**
      * Sends SFTP Packets
@@ -2998,33 +2311,7 @@ class SFTP extends SSH2
      * @return bool
      * @access private
      */
-    private function send_sftp_packet($type, $data, $request_id = 1)
-    {
-        $packet = $this->use_request_id ?
-            pack('NCNa*', strlen($data) + 5, $type, $request_id, $data) :
-            pack('NCa*',  strlen($data) + 1, $type, $data);
-
-        $start = strtok(microtime(), ' ') + strtok(''); // http://php.net/microtime#61838
-        $result = $this->send_channel_packet(self::CHANNEL, $packet);
-        $stop = strtok(microtime(), ' ') + strtok('');
-
-        if (defined('NET_SFTP_LOGGING')) {
-            $packet_type = '-> ' . $this->packet_types[$type] .
-                           ' (' . round($stop - $start, 4) . 's)';
-            if (NET_SFTP_LOGGING == self::LOG_REALTIME) {
-                echo "<pre>\r\n" . $this->format_log([$data], [$packet_type]) . "\r\n</pre>\r\n";
-                flush();
-                ob_flush();
-            } else {
-                $this->packet_type_log[] = $packet_type;
-                if (NET_SFTP_LOGGING == self::LOG_COMPLEX) {
-                    $this->packet_log[] = $data;
-                }
-            }
-        }
-
-        return $result;
-    }
+    
 
     /**
      * Receives SFTP Packets
@@ -3039,88 +2326,7 @@ class SFTP extends SSH2
      * @return string
      * @access private
      */
-    private function get_sftp_packet($request_id = null)
-    {
-        if (isset($request_id) && isset($this->requestBuffer[$request_id])) {
-            $this->packet_type = $this->requestBuffer[$request_id]['packet_type'];
-            $temp = $this->requestBuffer[$request_id]['packet'];
-            unset($this->requestBuffer[$request_id]);
-            return $temp;
-        }
-
-        $this->curTimeout = false;
-
-        $start = strtok(microtime(), ' ') + strtok(''); // http://php.net/microtime#61838
-
-        // SFTP packet length
-        while (strlen($this->packet_buffer) < 4) {
-            $temp = $this->get_channel_packet(self::CHANNEL, true);
-            if (is_bool($temp)) {
-                $this->packet_type = false;
-                $this->packet_buffer = '';
-                return false;
-            }
-            $this->packet_buffer.= $temp;
-        }
-        if (strlen($this->packet_buffer) < 4) {
-            return false;
-        }
-        extract(unpack('Nlength', Strings::shift($this->packet_buffer, 4)));
-        /** @var integer $length */
-
-        $tempLength = $length;
-        $tempLength-= strlen($this->packet_buffer);
-
-        // SFTP packet type and data payload
-        while ($tempLength > 0) {
-            $temp = $this->get_channel_packet(self::CHANNEL, true);
-            if (is_bool($temp)) {
-                $this->packet_type = false;
-                $this->packet_buffer = '';
-                return false;
-            }
-            $this->packet_buffer.= $temp;
-            $tempLength-= strlen($temp);
-        }
-
-        $stop = strtok(microtime(), ' ') + strtok('');
-
-        $this->packet_type = ord(Strings::shift($this->packet_buffer));
-
-        if ($this->use_request_id) {
-            extract(unpack('Npacket_id', Strings::shift($this->packet_buffer, 4))); // remove the request id
-            $length-= 5; // account for the request id and the packet type
-        } else {
-            $length-= 1; // account for the packet type
-        }
-
-        $packet = Strings::shift($this->packet_buffer, $length);
-
-        if (defined('NET_SFTP_LOGGING')) {
-            $packet_type = '<- ' . $this->packet_types[$this->packet_type] .
-                           ' (' . round($stop - $start, 4) . 's)';
-            if (NET_SFTP_LOGGING == self::LOG_REALTIME) {
-                echo "<pre>\r\n" . $this->format_log([$packet], [$packet_type]) . "\r\n</pre>\r\n";
-                flush();
-                ob_flush();
-            } else {
-                $this->packet_type_log[] = $packet_type;
-                if (NET_SFTP_LOGGING == self::LOG_COMPLEX) {
-                    $this->packet_log[] = $packet;
-                }
-            }
-        }
-
-        if (isset($request_id) && $this->use_request_id && $packet_id != $request_id) {
-            $this->requestBuffer[$packet_id] = array(
-                'packet_type' => $this->packet_type,
-                'packet' => $packet
-            );
-            return $this->_get_sftp_packet($request_id);
-        }
-
-        return $packet;
-    }
+    
 
     /**
      * Returns a log of the packets that have been sent and received.

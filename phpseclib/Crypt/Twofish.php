@@ -554,45 +554,7 @@ class Twofish extends BlockCipher
      * @param string $B
      * @return array
      */
-    private function mdsrem($A, $B)
-    {
-        // No gain by unrolling this loop.
-        for ($i = 0; $i < 8; ++$i) {
-            // Get most significant coefficient.
-            $t = 0xff & ($B >> 24);
-
-            // Shift the others up.
-            $B = ($B << 8) | (0xff & ($A >> 24));
-            $A<<= 8;
-
-            $u = $t << 1;
-
-            // Subtract the modular polynomial on overflow.
-            if ($t & 0x80) {
-                $u^= 0x14d;
-            }
-
-            // Remove t * (a * x^2 + 1).
-            $B ^= $t ^ ($u << 16);
-
-            // Form u = a*t + t/a = t*(a + 1/a).
-            $u^= 0x7fffffff & ($t >> 1);
-
-            // Add the modular polynomial on underflow.
-            if ($t & 0x01) {
-                $u^= 0xa6 ;
-            }
-
-            // Remove t * (a + 1/a) * (x^3 + x).
-            $B^= ($u << 24) | ($u << 8);
-        }
-
-        return [
-            0xff & $B >> 24,
-            0xff & $B >> 16,
-            0xff & $B >>  8,
-            0xff & $B];
-    }
+    
 
     /**
      * Encrypts a block

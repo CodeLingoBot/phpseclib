@@ -38,13 +38,7 @@ abstract class PhpseclibFunctionalTestCase extends PhpseclibTestCase
         return $this->_getEnv($variable);
     }
 
-    private function _getEnv($variable)
-    {
-        return getenv($this->_prefixEnvVariable($variable));
-    }
+    
 
-    private function _prefixEnvVariable($variable)
-    {
-        return 'PHPSECLIB_' . $variable;
-    }
+    
 }

@@ -665,18 +665,7 @@ abstract class AsymmetricKey
      * @param \phpseclib\Math\BigInteger $v
      * @return string
      */
-    private function int2octets($v)
-    {
-        $out = $v->toBytes();
-        $rolen = $this->q->getLengthInBytes();
-        if (strlen($out) < $rolen) {
-            return str_pad($out, $rolen, "\0", STR_PAD_LEFT);
-        } else if (strlen($out) > $rolen) {
-            return substr($out, -$rolen);
-        } else {
-            return $out;
-        }
-    }
+    
 
     /**
      * Bit String to Integer
@@ -703,12 +692,5 @@ abstract class AsymmetricKey
      * @param string $in
      * @return string
      */
-    private function bits2octets($in)
-    {
-        $z1 = $this->bits2int($in);
-        $z2 = $z1->subtract($this->q);
-        return $z2->compare(self::$zero) < 0 ?
-            $this->int2octets($z1) :
-            $this->int2octets($z2);
-    }
+    
 }

@@ -177,22 +177,7 @@ class Hash
      *
      * @access private
      */
-    private function computeKey()
-    {
-        if ($this->key === false) {
-            $this->computedKey = false;
-            return;
-        }
-
-        if (strlen($this->key) <= $this->getBlockLengthInBytes()) {
-            $this->computedKey = $this->key;
-            return;
-        }
-
-        $this->computedKey = is_array($this->hash) ?
-            call_user_func($this->hash, $this->key) :
-            hash($this->hash, $this->key, true);
-    }
+    
 
     /**
      * Gets the hash function.

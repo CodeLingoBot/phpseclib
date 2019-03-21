@@ -13,12 +13,7 @@ abstract class Unit_Crypt_AES_TestCase extends PhpseclibTestCase
 {
     protected $engine;
 
-    private function _checkEngine($aes)
-    {
-        if ($aes->getEngine() != $this->engine) {
-            self::markTestSkipped('Unable to initialize ' . $this->engine . ' engine');
-        }
-    }
+    
 
     /**
      * Produces all combinations of test values.

@@ -1331,44 +1331,5 @@ abstract class PHP extends Engine
      * @param int $split
      * @return \phpseclib\Math\BigInteger\Engines\PHP[]
      */
-    private function bitwise_small_split($split)
-    {
-        $vals = [];
-        $val = $this->value;
-
-        $mask = (1 << $split) - 1;
-
-        $i = $overflow = 0;
-        $len = count($val);
-        $val[] = 0;
-        $remaining = static::BASE;
-        while ($i != $len) {
-            $digit = $val[$i] & $mask;
-            $val[$i]>>= $split;
-            if (!$overflow) {
-                $remaining-= $split;
-                $overflow = $split <= $remaining ? 0 : $split - $remaining;
-
-                if (!$remaining) {
-                    $i++;
-                    $remaining = static::BASE;
-                    $overflow = 0;
-                }
-            } else if (++$i != $len) {
-                $tempmask = (1 << $overflow) - 1;
-                $digit|= ($val[$i] & $tempmask) << $remaining;
-                $val[$i]>>= $overflow;
-                $remaining = static::BASE - $overflow;
-                $overflow = $split <= $remaining ? 0 : $split - $remaining;
-            }
-
-            $vals[] = $digit;
-        }
-
-        while ($vals[count($vals) - 1] == 0) {
-            unset($vals[count($vals) - 1]);
-        }
-
-        return array_reverse($vals);
-    }
+    
 }

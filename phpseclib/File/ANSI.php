@@ -433,28 +433,7 @@ class ANSI
      *
      * @access private
      */
-    private function newLine()
-    {
-        //if ($this->y < $this->max_y) {
-        //    $this->y++;
-        //}
-
-        while ($this->y >= $this->max_y) {
-            $this->history = array_merge($this->history, [array_shift($this->screen)]);
-            $this->screen[] = '';
-
-            $this->history_attrs = array_merge($this->history_attrs, [array_shift($this->attrs)]);
-            $this->attrs[] = $this->attr_row;
-
-            if (count($this->history) >= $this->max_history) {
-                array_shift($this->history);
-                array_shift($this->history_attrs);
-            }
-
-            $this->y--;
-        }
-        $this->y++;
-    }
+    
 
     /**
      * Returns the current coordinate without preformating
@@ -465,56 +444,7 @@ class ANSI
      * @param string $char
      * @return string
      */
-    private function processCoordinate($last_attr, $cur_attr, $char)
-    {
-        $output = '';
-
-        if ($last_attr != $cur_attr) {
-            $close = $open = '';
-            if ($last_attr->foreground != $cur_attr->foreground) {
-                if ($cur_attr->foreground != 'white') {
-                    $open.= '<span style="color: ' . $cur_attr->foreground . '">';
-                }
-                if ($last_attr->foreground != 'white') {
-                    $close = '</span>' . $close;
-                }
-            }
-            if ($last_attr->background != $cur_attr->background) {
-                if ($cur_attr->background != 'black') {
-                    $open.= '<span style="background: ' . $cur_attr->background . '">';
-                }
-                if ($last_attr->background != 'black') {
-                    $close = '</span>' . $close;
-                }
-            }
-            if ($last_attr->bold != $cur_attr->bold) {
-                if ($cur_attr->bold) {
-                    $open.= '<b>';
-                } else {
-                    $close = '</b>' . $close;
-                }
-            }
-            if ($last_attr->underline != $cur_attr->underline) {
-                if ($cur_attr->underline) {
-                    $open.= '<u>';
-                } else {
-                    $close = '</u>' . $close;
-                }
-            }
-            if ($last_attr->blink != $cur_attr->blink) {
-                if ($cur_attr->blink) {
-                    $open.= '<blink>';
-                } else {
-                    $close = '</blink>' . $close;
-                }
-            }
-            $output.= $close . $open;
-        }
-
-        $output.= htmlspecialchars($char);
-
-        return $output;
-    }
+    
 
     /**
      * Returns the current screen without preformating
@@ -522,23 +452,7 @@ class ANSI
      * @access private
      * @return string
      */
-    private function getScreenHelper()
-    {
-        $output = '';
-        $last_attr = $this->base_attr_cell;
-        for ($i = 0; $i <= $this->max_y; $i++) {
-            for ($j = 0; $j <= $this->max_x; $j++) {
-                $cur_attr = $this->attrs[$i][$j];
-                $output.= $this->processCoordinate($last_attr, $cur_attr, isset($this->screen[$i][$j]) ? $this->screen[$i][$j] : '');
-                $last_attr = $this->attrs[$i][$j];
-            }
-            $output.= "\r\n";
-        }
-        $output = substr($output, 0, -2);
-        // close any remaining open tags
-        $output.= $this->processCoordinate($last_attr, $this->base_attr_cell, '');
-        return rtrim($output);
-    }
+    
 
     /**
      * Returns the current screen

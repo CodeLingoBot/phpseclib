@@ -275,17 +275,7 @@ class SCP
      * @param string $data
      * @access private
      */
-    private function send($data)
-    {
-        switch ($this->mode) {
-            case self::MODE_SSH2:
-                Objects::callFunc($this->ssh, 'send_channel_packet', [SSH2::CHANNEL_EXEC, $data]);
-                break;
-            case self::MODE_SSH1:
-                $data = pack('CNa*', NET_SSH1_CMSG_STDIN_DATA, strlen($data), $data);
-                Objects::callFunc($this->ssh, 'send_binary_packet', [$data]);
-        }
-    }
+    
 
     /**
      * Receives a packet from an SSH server
@@ -294,53 +284,12 @@ class SCP
      * @throws \UnexpectedValueException on receipt of an unexpected packet
      * @access private
      */
-    private function receive()
-    {
-        switch ($this->mode) {
-            case self::MODE_SSH2:
-                return Objects::callFunc($this->ssh, 'get_channel_packet', [SSH2::CHANNEL_EXEC, true]);
-            case self::MODE_SSH1:
-                if (!Objects::getVar($this->ssh, 'bitmap')) {
-                    return false;
-                }
-                while (true) {
-                    $response = Objects::getFunc($this->ssh, 'get_binary_packet');
-                    switch ($response[SSH1::RESPONSE_TYPE]) {
-                        case NET_SSH1_SMSG_STDOUT_DATA:
-                            if (strlen($response[SSH1::RESPONSE_DATA]) < 4) {
-                                return false;
-                            }
-                            extract(unpack('Nlength', $response[SSH1::RESPONSE_DATA]));
-                            /** @var integer $length */
-
-                            return Strings::shift($response[SSH1::RESPONSE_DATA], $length);
-                        case NET_SSH1_SMSG_STDERR_DATA:
-                            break;
-                        case NET_SSH1_SMSG_EXITSTATUS:
-                            Objects::callFunc($this->ssh, 'send_binary_packet', [chr(NET_SSH1_CMSG_EXIT_CONFIRMATION)]);
-                            fclose(Objects::getVar($this->ssh, 'fsock'));
-                            Objects::setVar($this->ssh, 'bitmap', 0);
-                            return false;
-                        default:
-                            throw new \UnexpectedValueException('Unknown packet received');
-                    }
-                }
-        }
-    }
+    
 
     /**
      * Closes the connection to an SSH server
      *
      * @access private
      */
-    private function close()
-    {
-        switch ($this->mode) {
-            case self::MODE_SSH2:
-                Objects::callFunc($this->ssh, 'close_channel', [SSH2::CHANNEL_EXEC, true]);
-                break;
-            case self::MODE_SSH1:
-                Objects::callFunc($this->ssh, 'disconnect');
-        }
-    }
+    
 }

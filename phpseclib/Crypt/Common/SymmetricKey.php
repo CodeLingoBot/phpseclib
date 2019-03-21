@@ -1757,78 +1757,7 @@ abstract class SymmetricKey
      * @return string
      * @access private
      */
-    private function openssl_ctr_process($plaintext, &$encryptIV, &$buffer)
-    {
-        $ciphertext = '';
-
-        $block_size = $this->block_size;
-        $key = $this->key;
-
-        if ($this->openssl_emulate_ctr) {
-            $xor = $encryptIV;
-            if (strlen($buffer['ciphertext'])) {
-                for ($i = 0; $i < strlen($plaintext); $i+=$block_size) {
-                    $block = substr($plaintext, $i, $block_size);
-                    if (strlen($block) > strlen($buffer['ciphertext'])) {
-                        $buffer['ciphertext'].= openssl_encrypt($xor, static::$cipher_name_openssl_ecb, $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING);
-                    }
-                    Strings::increment_str($xor);
-                    $otp = Strings::shift($buffer['ciphertext'], $block_size);
-                    $ciphertext.= $block ^ $otp;
-                }
-            } else {
-                for ($i = 0; $i < strlen($plaintext); $i+=$block_size) {
-                    $block = substr($plaintext, $i, $block_size);
-                    $otp = openssl_encrypt($xor, static::$cipher_name_openssl_ecb, $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING);
-                    Strings::increment_str($xor);
-                    $ciphertext.= $block ^ $otp;
-                }
-            }
-            if ($this->continuousBuffer) {
-                $encryptIV = $xor;
-                if ($start = strlen($plaintext) % $block_size) {
-                    $buffer['ciphertext'] = substr($key, $start) . $buffer['ciphertext'];
-                }
-            }
-
-            return $ciphertext;
-        }
-
-        if (strlen($buffer['ciphertext'])) {
-            $ciphertext = $plaintext ^ Strings::shift($buffer['ciphertext'], strlen($plaintext));
-            $plaintext = substr($plaintext, strlen($ciphertext));
-
-            if (!strlen($plaintext)) {
-                return $ciphertext;
-            }
-        }
-
-        $overflow = strlen($plaintext) % $block_size;
-        if ($overflow) {
-            $plaintext2 = Strings::pop($plaintext, $overflow); // ie. trim $plaintext to a multiple of $block_size and put rest of $plaintext in $plaintext2
-            $encrypted = openssl_encrypt($plaintext . str_repeat("\0", $block_size), $this->cipher_name_openssl, $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $encryptIV);
-            $temp = Strings::pop($encrypted, $block_size);
-            $ciphertext.= $encrypted . ($plaintext2 ^ $temp);
-            if ($this->continuousBuffer) {
-                $buffer['ciphertext'] = substr($temp, $overflow);
-                $encryptIV = $temp;
-            }
-        } elseif (!strlen($buffer['ciphertext'])) {
-            $ciphertext.= openssl_encrypt($plaintext . str_repeat("\0", $block_size), $this->cipher_name_openssl, $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $encryptIV);
-            $temp = Strings::pop($ciphertext, $block_size);
-            if ($this->continuousBuffer) {
-                $encryptIV = $temp;
-            }
-        }
-        if ($this->continuousBuffer) {
-            $encryptIV = openssl_decrypt($encryptIV, static::$cipher_name_openssl_ecb, $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING);
-            if ($overflow) {
-                Strings::increment_str($encryptIV);
-            }
-        }
-
-        return $ciphertext;
-    }
+    
 
     /**
      * OpenSSL OFB Processor
@@ -1845,43 +1774,7 @@ abstract class SymmetricKey
      * @return string
      * @access private
      */
-    private function openssl_ofb_process($plaintext, &$encryptIV, &$buffer)
-    {
-        if (strlen($buffer['xor'])) {
-            $ciphertext = $plaintext ^ $buffer['xor'];
-            $buffer['xor'] = substr($buffer['xor'], strlen($ciphertext));
-            $plaintext = substr($plaintext, strlen($ciphertext));
-        } else {
-            $ciphertext = '';
-        }
-
-        $block_size = $this->block_size;
-
-        $len = strlen($plaintext);
-        $key = $this->key;
-        $overflow = $len % $block_size;
-
-        if (strlen($plaintext)) {
-            if ($overflow) {
-                $ciphertext.= openssl_encrypt(substr($plaintext, 0, -$overflow) . str_repeat("\0", $block_size), $this->cipher_name_openssl, $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $encryptIV);
-                $xor = Strings::pop($ciphertext, $block_size);
-                if ($this->continuousBuffer) {
-                    $encryptIV = $xor;
-                }
-                $ciphertext.= Strings::shift($xor, $overflow) ^ substr($plaintext, -$overflow);
-                if ($this->continuousBuffer) {
-                    $buffer['xor'] = $xor;
-                }
-            } else {
-                $ciphertext = openssl_encrypt($plaintext, $this->cipher_name_openssl, $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING, $encryptIV);
-                if ($this->continuousBuffer) {
-                    $encryptIV = substr($ciphertext, -$block_size) ^ substr($plaintext, -$block_size);
-                }
-            }
-        }
-
-        return $ciphertext;
-    }
+    
 
     /**
      * phpseclib <-> OpenSSL Mode Mapper
@@ -2992,29 +2885,7 @@ abstract class SymmetricKey
      *
      * @access private
      */
-    private function setupGCM()
-    {
-        // don't keep on re-calculating $this->h
-        if (!$this->h || $this->h->key != $this->key) {
-            $cipher = new static('ecb');
-            $cipher->setKey($this->key);
-            $cipher->disablePadding();
-
-            $this->h = self::$gcmField->newInteger(
-                Strings::switchEndianness($cipher->encrypt("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"))
-            );
-            $this->h->key = $this->key;
-        }
-
-        if (strlen($this->nonce) == 12) {
-            $this->iv = $this->nonce . "\0\0\0\1";
-        } else {
-            $s = 16 * ceil(strlen($this->nonce) / 16) - strlen($this->nonce);
-            $this->iv = $this->ghash(
-                self::nullPad128($this->nonce) . str_repeat("\0", 8) . self::len64($this->nonce)
-            );
-        }
-    }
+    
 
     /**
      * Performs GHASH operation
@@ -3028,30 +2899,7 @@ abstract class SymmetricKey
      * @param string $x
      * @return string
      */
-    private function ghash($x)
-    {
-        $h = $this->h;
-        $y = ["\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"];
-        $x = str_split($x, 16);
-        $n = 0;
-        // the switchEndianness calls are necessary because the multiplication algorithm in BinaryField/Integer
-        // interprets strings as polynomials in big endian order whereas in GCM they're interpreted in little
-        // endian order per https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf#page=19.
-        // big endian order is what binary field elliptic curves use per http://www.secg.org/sec1-v2.pdf#page=18.
-
-        // we could switchEndianness here instead of in the while loop but doing so in the while loop seems like it
-        // might be slightly more performant
-        //$x = Strings::switchEndianness($x);
-        foreach ($x as $xn) {
-            $xn = Strings::switchEndianness($xn);
-            $t = $y[$n] ^ $xn;
-            $temp = self::$gcmField->newInteger($t);
-            $y[++$n] = $temp->multiply($h)->toBytes();
-            $y[$n] = substr($y[$n], 1);
-        }
-        $y[$n] = Strings::switchEndianness($y[$n]);
-        return $y[$n];
-    }
+    
 
     /**
      * Returns the bit length of a string in a packed format

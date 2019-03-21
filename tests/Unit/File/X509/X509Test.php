@@ -192,30 +192,7 @@ aBtsWpliLSex/HHhtRW9AkBGcq67zKmEpJ9kXcYLEjJii3flFS+Ct/rNm+Hhm1l7
         $this->assertArrayHasKey('parameters', $cert['tbsCertificate']['signature']);
     }
 
-    private function _encodeOID($oid)
-    {
-        if ($oid === false) {
-            user_error('Invalid OID');
-            return false;
-        }
-        $value = '';
-        $parts = explode('.', $oid);
-        $value = chr(40 * $parts[0] + $parts[1]);
-        for ($i = 2; $i < count($parts); $i++) {
-            $temp = '';
-            if (!$parts[$i]) {
-                $temp = "\0";
-            } else {
-                while ($parts[$i]) {
-                    $temp = chr(0x80 | ($parts[$i] & 0x7F)) . $temp;
-                    $parts[$i] >>= 7;
-                }
-                $temp[strlen($temp) - 1] = $temp[strlen($temp) - 1] & chr(0x7F);
-            }
-            $value.= $temp;
-        }
-        return $value;
-    }
+    
 
     public function testGetOID()
     {

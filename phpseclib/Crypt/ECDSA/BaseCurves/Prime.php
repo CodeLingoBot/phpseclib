@@ -635,34 +635,7 @@ class Prime extends Base
      *
      * @return int[]
      */
-    private function getNAFPoints($point, $wnd)
-    {
-        if (isset($point['naf'])) {
-            return $point['naf'];
-        }
-
-        $res = [$point];
-        $max = (1 << $wnd) - 1;
-        $dbl = $max == 1 ? null : $this->doublePoint($point);
-        for ($i = 1; $i < $max; $i++) {
-            $res[] = $this->addPoint($res[$i - 1], $dbl);
-        }
-
-        $point['naf'] = $res;
-
-        /*
-        $str = '';
-        foreach ($res as $re) {
-            $re[0] = bin2hex($re[0]->toBytes());
-            $re[1] = bin2hex($re[1]->toBytes());
-            $str.= "            ['$re[0]', '$re[1]'],\r\n";
-        }
-        file_put_contents('temp.txt', $str);
-        exit;
-        */
-
-        return $res;
-    }
+    
 
     /**
      * Precomputes points in Joint Sparse Form

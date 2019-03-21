@@ -607,18 +607,7 @@ class Rijndael extends BlockCipher
      * @access private
      * @param int $word
      */
-    private function subWord($word)
-    {
-        static $sbox;
-        if (empty($sbox)) {
-            list(, , , , $sbox) = self::getTables();
-        }
-
-        return  $sbox[$word       & 0x000000FF]        |
-               ($sbox[$word >>  8 & 0x000000FF] <<  8) |
-               ($sbox[$word >> 16 & 0x000000FF] << 16) |
-               ($sbox[$word >> 24 & 0x000000FF] << 24);
-    }
+    
 
     /**
      * Provides the mixColumns and sboxes tables

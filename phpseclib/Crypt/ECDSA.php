@@ -237,13 +237,7 @@ class ECDSA extends AsymmetricKey
      *
      * @access private
      */
-    private function clearKey()
-    {
-        $this->format = null;
-        $this->dA = null;
-        $this->QA = null;
-        $this->curve = null;
-    }
+    
 
     /**
      * Returns the curve

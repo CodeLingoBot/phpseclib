@@ -887,17 +887,7 @@ class RSA extends AsymmetricKey
      * @param int $xLen
      * @return bool|string
      */
-    private function i2osp($x, $xLen)
-    {
-        if ($x === false) {
-            return false;
-        }
-        $x = $x->toBytes();
-        if (strlen($x) > $xLen) {
-            return false;
-        }
-        return str_pad($x, $xLen, chr(0), STR_PAD_LEFT);
-    }
+    
 
     /**
      * Octet-String-to-Integer primitive
@@ -908,10 +898,7 @@ class RSA extends AsymmetricKey
      * @param string $x
      * @return \phpseclib\Math\BigInteger
      */
-    private function os2ip($x)
-    {
-        return new BigInteger($x, 256);
-    }
+    
 
     /**
      * Exponentiate with or without Chinese Remainder Theorem
@@ -922,77 +909,7 @@ class RSA extends AsymmetricKey
      * @param \phpseclib\Math\BigInteger $x
      * @return \phpseclib\Math\BigInteger
      */
-    private function exponentiate($x)
-    {
-        switch (true) {
-            case empty($this->primes):
-            case $this->primes[1]->equals(self::$zero):
-            case empty($this->coefficients):
-            case $this->coefficients[2]->equals(self::$zero):
-            case empty($this->exponents):
-            case $this->exponents[1]->equals(self::$zero):
-                return $x->modPow($this->exponent, $this->modulus);
-        }
-
-        $num_primes = count($this->primes);
-
-        if (!static::$enableBlinding) {
-            $m_i = [
-                1 => $x->modPow($this->exponents[1], $this->primes[1]),
-                2 => $x->modPow($this->exponents[2], $this->primes[2])
-            ];
-            $h = $m_i[1]->subtract($m_i[2]);
-            $h = $h->multiply($this->coefficients[2]);
-            list(, $h) = $h->divide($this->primes[1]);
-            $m = $m_i[2]->add($h->multiply($this->primes[2]));
-
-            $r = $this->primes[1];
-            for ($i = 3; $i <= $num_primes; $i++) {
-                $m_i = $x->modPow($this->exponents[$i], $this->primes[$i]);
-
-                $r = $r->multiply($this->primes[$i - 1]);
-
-                $h = $m_i->subtract($m);
-                $h = $h->multiply($this->coefficients[$i]);
-                list(, $h) = $h->divide($this->primes[$i]);
-
-                $m = $m->add($r->multiply($h));
-            }
-        } else {
-            $smallest = $this->primes[1];
-            for ($i = 2; $i <= $num_primes; $i++) {
-                if ($smallest->compare($this->primes[$i]) > 0) {
-                    $smallest = $this->primes[$i];
-                }
-            }
-
-            $r = BigInteger::randomRange(self::$one, $smallest->subtract(self::$one));
-
-            $m_i = [
-                1 => $this->blind($x, $r, 1),
-                2 => $this->blind($x, $r, 2)
-            ];
-            $h = $m_i[1]->subtract($m_i[2]);
-            $h = $h->multiply($this->coefficients[2]);
-            list(, $h) = $h->divide($this->primes[1]);
-            $m = $m_i[2]->add($h->multiply($this->primes[2]));
-
-            $r = $this->primes[1];
-            for ($i = 3; $i <= $num_primes; $i++) {
-                $m_i = $this->blind($x, $r, $i);
-
-                $r = $r->multiply($this->primes[$i - 1]);
-
-                $h = $m_i->subtract($m);
-                $h = $h->multiply($this->coefficients[$i]);
-                list(, $h) = $h->divide($this->primes[$i]);
-
-                $m = $m->add($r->multiply($h));
-            }
-        }
-
-        return $m;
-    }
+    
 
     /**
      * Enable RSA Blinding
@@ -1026,17 +943,7 @@ class RSA extends AsymmetricKey
      * @param int $i
      * @return \phpseclib\Math\BigInteger
      */
-    private function blind($x, $r, $i)
-    {
-        $x = $x->multiply($r->modPow($this->publicExponent, $this->primes[$i]));
-        $x = $x->modPow($this->exponents[$i], $this->primes[$i]);
-
-        $r = $r->modInverse($this->primes[$i]);
-        $x = $x->multiply($r);
-        list(, $x) = $x->divide($this->primes[$i]);
-
-        return $x;
-    }
+    
 
     /**
      * RSAEP
@@ -1047,13 +954,7 @@ class RSA extends AsymmetricKey
      * @param \phpseclib\Math\BigInteger $m
      * @return bool|\phpseclib\Math\BigInteger
      */
-    private function rsaep($m)
-    {
-        if ($m->compare(self::$zero) < 0 || $m->compare($this->modulus) > 0) {
-            return false;
-        }
-        return $this->exponentiate($m);
-    }
+    
 
     /**
      * RSADP
@@ -1064,13 +965,7 @@ class RSA extends AsymmetricKey
      * @param \phpseclib\Math\BigInteger $c
      * @return bool|\phpseclib\Math\BigInteger
      */
-    private function rsadp($c)
-    {
-        if ($c->compare(self::$zero) < 0 || $c->compare($this->modulus) > 0) {
-            return false;
-        }
-        return $this->exponentiate($c);
-    }
+    
 
     /**
      * RSASP1
@@ -1081,13 +976,7 @@ class RSA extends AsymmetricKey
      * @param \phpseclib\Math\BigInteger $m
      * @return bool|\phpseclib\Math\BigInteger
      */
-    private function rsasp1($m)
-    {
-        if ($m->compare(self::$zero) < 0 || $m->compare($this->modulus) > 0) {
-            return false;
-        }
-        return $this->exponentiate($m);
-    }
+    
 
     /**
      * RSAVP1
@@ -1098,13 +987,7 @@ class RSA extends AsymmetricKey
      * @param \phpseclib\Math\BigInteger $s
      * @return bool|\phpseclib\Math\BigInteger
      */
-    private function rsavp1($s)
-    {
-        if ($s->compare(self::$zero) < 0 || $s->compare($this->modulus) > 0) {
-            return false;
-        }
-        return $this->exponentiate($s);
-    }
+    
 
     /**
      * MGF1
@@ -1116,19 +999,7 @@ class RSA extends AsymmetricKey
      * @param int $maskLen
      * @return string
      */
-    private function mgf1($mgfSeed, $maskLen)
-    {
-        // if $maskLen would yield strings larger than 4GB, PKCS#1 suggests a "Mask too long" error be output.
-
-        $t = '';
-        $count = ceil($maskLen / $this->mgfHLen);
-        for ($i = 0; $i < $count; $i++) {
-            $c = pack('N', $i);
-            $t.= $this->mgfHash->hash($mgfSeed . $c);
-        }
-
-        return substr($t, 0, $maskLen);
-    }
+    
 
     /**
      * RSAES-OAEP-ENCRYPT
@@ -1142,41 +1013,7 @@ class RSA extends AsymmetricKey
      * @throws \LengthException if strlen($m) > $this->k - 2 * $this->hLen - 2
      * @return string
      */
-    private function rsaes_oaep_encrypt($m, $l = '')
-    {
-        $mLen = strlen($m);
-
-        // Length checking
-
-        // if $l is larger than two million terrabytes and you're using sha1, PKCS#1 suggests a "Label too long" error
-        // be output.
-
-        if ($mLen > $this->k - 2 * $this->hLen - 2) {
-            throw new \LengthException('Message too long');
-        }
-
-        // EME-OAEP encoding
-
-        $lHash = $this->hash->hash($l);
-        $ps = str_repeat(chr(0), $this->k - $mLen - 2 * $this->hLen - 2);
-        $db = $lHash . $ps . chr(1) . $m;
-        $seed = Random::string($this->hLen);
-        $dbMask = $this->mgf1($seed, $this->k - $this->hLen - 1);
-        $maskedDB = $db ^ $dbMask;
-        $seedMask = $this->mgf1($maskedDB, $this->hLen);
-        $maskedSeed = $seed ^ $seedMask;
-        $em = chr(0) . $maskedSeed . $maskedDB;
-
-        // RSA encryption
-
-        $m = $this->os2ip($em);
-        $c = $this->rsaep($m);
-        $c = $this->i2osp($c, $this->k);
-
-        // Output the ciphertext C
-
-        return $c;
-    }
+    
 
     /**
      * RSAES-OAEP-DECRYPT
@@ -1204,58 +1041,7 @@ class RSA extends AsymmetricKey
      * @param string $l
      * @return bool|string
      */
-    private function rsaes_oaep_decrypt($c, $l = '')
-    {
-        // Length checking
-
-        // if $l is larger than two million terrabytes and you're using sha1, PKCS#1 suggests a "Label too long" error
-        // be output.
-
-        if (strlen($c) != $this->k || $this->k < 2 * $this->hLen + 2) {
-            return false;
-        }
-
-        // RSA decryption
-
-        $c = $this->os2ip($c);
-        $m = $this->rsadp($c);
-        $em = $this->i2osp($m, $this->k);
-        if ($em === false) {
-            return false;
-        }
-
-        // EME-OAEP decoding
-
-        $lHash = $this->hash->hash($l);
-        $y = ord($em[0]);
-        $maskedSeed = substr($em, 1, $this->hLen);
-        $maskedDB = substr($em, $this->hLen + 1);
-        $seedMask = $this->mgf1($maskedDB, $this->hLen);
-        $seed = $maskedSeed ^ $seedMask;
-        $dbMask = $this->mgf1($seed, $this->k - $this->hLen - 1);
-        $db = $maskedDB ^ $dbMask;
-        $lHash2 = substr($db, 0, $this->hLen);
-        $m = substr($db, $this->hLen);
-        $hashesMatch = Strings::equals($lHash, $lHash2);
-        $leadingZeros = 1;
-        $patternMatch = 0;
-        $offset = 0;
-        for ($i = 0; $i < strlen($m); $i++) {
-            $patternMatch|= $leadingZeros & ($m[$i] === "\1");
-            $leadingZeros&= $m[$i] === "\0";
-            $offset+= $patternMatch ? 0 : 1;
-        }
-
-        // we do & instead of && to avoid https://en.wikipedia.org/wiki/Short-circuit_evaluation
-        // to protect against timing attacks
-        if (!$hashesMatch & !$patternMatch) {
-            return false;
-        }
-
-        // Output the message M
-
-        return substr($m, $offset + 1);
-    }
+    
 
     /**
      * Raw Encryption / Decryption
@@ -1267,16 +1053,7 @@ class RSA extends AsymmetricKey
      * @return bool|string
      * @throws \LengthException if strlen($m) > $this->k
      */
-    private function raw_encrypt($m)
-    {
-        if (strlen($m) > $this->k) {
-            throw new \LengthException('Message too long');
-        }
-
-        $temp = $this->os2ip($m);
-        $temp = $this->rsaep($temp);
-        return  $this->i2osp($temp, $this->k);
-    }
+    
 
     /**
      * RSAES-PKCS1-V1_5-ENCRYPT
@@ -1289,43 +1066,7 @@ class RSA extends AsymmetricKey
      * @throws \LengthException if strlen($m) > $this->k - 11
      * @return bool|string
      */
-    private function rsaes_pkcs1_v1_5_encrypt($m, $pkcs15_compat = false)
-    {
-        $mLen = strlen($m);
-
-        // Length checking
-
-        if ($mLen > $this->k - 11) {
-            throw new \LengthException('Message too long');
-        }
-
-        // EME-PKCS1-v1_5 encoding
-
-        $psLen = $this->k - $mLen - 3;
-        $ps = '';
-        while (strlen($ps) != $psLen) {
-            $temp = Random::string($psLen - strlen($ps));
-            $temp = str_replace("\x00", '', $temp);
-            $ps.= $temp;
-        }
-        $type = 2;
-        // see the comments of _rsaes_pkcs1_v1_5_decrypt() to understand why this is being done
-        if ($pkcs15_compat && (!isset($this->publicExponent) || $this->exponent !== $this->publicExponent)) {
-            $type = 1;
-            // "The padding string PS shall consist of k-3-||D|| octets. ... for block type 01, they shall have value FF"
-            $ps = str_repeat("\xFF", $psLen);
-        }
-        $em = chr(0) . chr($type) . $ps . chr(0) . $m;
-
-        // RSA encryption
-        $m = $this->os2ip($em);
-        $c = $this->rsaep($m);
-        $c = $this->i2osp($c, $this->k);
-
-        // Output the ciphertext C
-
-        return $c;
-    }
+    
 
     /**
      * RSAES-PKCS1-V1_5-DECRYPT
@@ -1347,40 +1088,7 @@ class RSA extends AsymmetricKey
      * @param string $c
      * @return bool|string
      */
-    private function rsaes_pkcs1_v1_5_decrypt($c)
-    {
-        // Length checking
-
-        if (strlen($c) != $this->k) { // or if k < 11
-            return false;
-        }
-
-        // RSA decryption
-
-        $c = $this->os2ip($c);
-        $m = $this->rsadp($c);
-        $em = $this->i2osp($m, $this->k);
-        if ($em === false) {
-            return false;
-        }
-
-        // EME-PKCS1-v1_5 decoding
-
-        if (ord($em[0]) != 0 || ord($em[1]) > 2) {
-            return false;
-        }
-
-        $ps = substr($em, 2, strpos($em, chr(0), 2) - 2);
-        $m = substr($em, strlen($ps) + 3);
-
-        if (strlen($ps) < 8) {
-            return false;
-        }
-
-        // Output M
-
-        return $m;
-    }
+    
 
     /**
      * EMSA-PSS-ENCODE
@@ -1393,31 +1101,7 @@ class RSA extends AsymmetricKey
      * @throws \RuntimeException on encoding error
      * @param int $emBits
      */
-    private function emsa_pss_encode($m, $emBits)
-    {
-        // if $m is larger than two million terrabytes and you're using sha1, PKCS#1 suggests a "Label too long" error
-        // be output.
-
-        $emLen = ($emBits + 1) >> 3; // ie. ceil($emBits / 8)
-        $sLen = $this->sLen !== null ? $this->sLen : $this->hLen;
-
-        $mHash = $this->hash->hash($m);
-        if ($emLen < $this->hLen + $sLen + 2) {
-            return false;
-        }
-
-        $salt = Random::string($sLen);
-        $m2 = "\0\0\0\0\0\0\0\0" . $mHash . $salt;
-        $h = $this->hash->hash($m2);
-        $ps = str_repeat(chr(0), $emLen - $sLen - $this->hLen - 2);
-        $db = $ps . chr(1) . $salt;
-        $dbMask = $this->mgf1($h, $emLen - $this->hLen - 1);
-        $maskedDB = $db ^ $dbMask;
-        $maskedDB[0] = ~chr(0xFF << ($emBits & 7)) & $maskedDB[0];
-        $em = $maskedDB . $h . chr(0xBC);
-
-        return $em;
-    }
+    
 
     /**
      * EMSA-PSS-VERIFY
@@ -1430,41 +1114,7 @@ class RSA extends AsymmetricKey
      * @param int $emBits
      * @return string
      */
-    private function emsa_pss_verify($m, $em, $emBits)
-    {
-        // if $m is larger than two million terrabytes and you're using sha1, PKCS#1 suggests a "Label too long" error
-        // be output.
-
-        $emLen = ($emBits + 1) >> 3; // ie. ceil($emBits / 8);
-        $sLen = $this->sLen !== null ? $this->sLen : $this->hLen;
-
-        $mHash = $this->hash->hash($m);
-        if ($emLen < $this->hLen + $sLen + 2) {
-            return false;
-        }
-
-        if ($em[strlen($em) - 1] != chr(0xBC)) {
-            return false;
-        }
-
-        $maskedDB = substr($em, 0, -$this->hLen - 1);
-        $h = substr($em, -$this->hLen - 1, $this->hLen);
-        $temp = chr(0xFF << ($emBits & 7));
-        if ((~$maskedDB[0] & $temp) != $temp) {
-            return false;
-        }
-        $dbMask = $this->mgf1($h, $emLen - $this->hLen - 1);
-        $db = $maskedDB ^ $dbMask;
-        $db[0] = ~chr(0xFF << ($emBits & 7)) & $db[0];
-        $temp = $emLen - $this->hLen - $sLen - 2;
-        if (substr($db, 0, $temp) != str_repeat(chr(0), $temp) || ord($db[$temp]) != 1) {
-            return false;
-        }
-        $salt = substr($db, $temp + 1); // should be $sLen long
-        $m2 = "\0\0\0\0\0\0\0\0" . $mHash . $salt;
-        $h2 = $this->hash->hash($m2);
-        return Strings::equals($h, $h2);
-    }
+    
 
     /**
      * RSASSA-PSS-SIGN
@@ -1475,22 +1125,7 @@ class RSA extends AsymmetricKey
      * @param string $m
      * @return bool|string
      */
-    private function rsassa_pss_sign($m)
-    {
-        // EMSA-PSS encoding
-
-        $em = $this->emsa_pss_encode($m, 8 * $this->k - 1);
-
-        // RSA signature
-
-        $m = $this->os2ip($em);
-        $s = $this->rsasp1($m);
-        $s = $this->i2osp($s, $this->k);
-
-        // Output the signature S
-
-        return $s;
-    }
+    
 
     /**
      * RSASSA-PSS-VERIFY
@@ -1502,29 +1137,7 @@ class RSA extends AsymmetricKey
      * @param string $s
      * @return bool|string
      */
-    private function rsassa_pss_verify($m, $s)
-    {
-        // Length checking
-
-        if (strlen($s) != $this->k) {
-            return false;
-        }
-
-        // RSA verification
-
-        $modBits = 8 * $this->k;
-
-        $s2 = $this->os2ip($s);
-        $m2 = $this->rsavp1($s2);
-        $em = $this->i2osp($m2, $modBits >> 3);
-        if ($em === false) {
-            return false;
-        }
-
-        // EMSA-PSS verification
-
-        return $this->emsa_pss_verify($m, $em, $modBits - 1);
-    }
+    
 
     /**
      * EMSA-PKCS1-V1_5-ENCODE
@@ -1537,53 +1150,7 @@ class RSA extends AsymmetricKey
      * @throws \LengthException if the intended encoded message length is too short
      * @return string
      */
-    private function emsa_pkcs1_v1_5_encode($m, $emLen)
-    {
-        $h = $this->hash->hash($m);
-
-        // see http://tools.ietf.org/html/rfc3447#page-43
-        switch ($this->hashName) {
-            case 'md2':
-                $t = "\x30\x20\x30\x0c\x06\x08\x2a\x86\x48\x86\xf7\x0d\x02\x02\x05\x00\x04\x10";
-                break;
-            case 'md5':
-                $t = "\x30\x20\x30\x0c\x06\x08\x2a\x86\x48\x86\xf7\x0d\x02\x05\x05\x00\x04\x10";
-                break;
-            case 'sha1':
-                $t = "\x30\x21\x30\x09\x06\x05\x2b\x0e\x03\x02\x1a\x05\x00\x04\x14";
-                break;
-            case 'sha256':
-                $t = "\x30\x31\x30\x0d\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x01\x05\x00\x04\x20";
-                break;
-            case 'sha384':
-                $t = "\x30\x41\x30\x0d\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x02\x05\x00\x04\x30";
-                break;
-            case 'sha512':
-                $t = "\x30\x51\x30\x0d\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x03\x05\x00\x04\x40";
-                break;
-            // from https://www.emc.com/collateral/white-papers/h11300-pkcs-1v2-2-rsa-cryptography-standard-wp.pdf#page=40
-            case 'sha224':
-                $t = "\x30\x2d\x30\x0d\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x04\x05\x00\x04\x1c";
-                break;
-            case 'sha512/224':
-                $t = "\x30\x2d\x30\x0d\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x05\x05\x00\x04\x1c";
-                break;
-            case 'sha512/256':
-                $t = "\x30\x31\x30\x0d\x06\x09\x60\x86\x48\x01\x65\x03\x04\x02\x06\x05\x00\x04\x20";
-        }
-        $t.= $h;
-        $tLen = strlen($t);
-
-        if ($emLen < $tLen + 11) {
-            throw new \LengthException('Intended encoded message length too short');
-        }
-
-        $ps = str_repeat(chr(0xFF), $emLen - $tLen - 3);
-
-        $em = "\0\1$ps\0$t";
-
-        return $em;
-    }
+    
 
     /**
      * RSASSA-PKCS1-V1_5-SIGN
@@ -1595,28 +1162,7 @@ class RSA extends AsymmetricKey
      * @throws \LengthException if the RSA modulus is too short
      * @return bool|string
      */
-    private function rsassa_pkcs1_v1_5_sign($m)
-    {
-        // EMSA-PKCS1-v1_5 encoding
-
-        // If the encoding operation outputs "intended encoded message length too short," output "RSA modulus
-        // too short" and stop.
-        try {
-            $em = $this->emsa_pkcs1_v1_5_encode($m, $this->k);
-        } catch (\LengthException $e) {
-            throw new \LengthException('RSA modulus too short');
-        }
-
-        // RSA signature
-
-        $m = $this->os2ip($em);
-        $s = $this->rsasp1($m);
-        $s = $this->i2osp($s, $this->k);
-
-        // Output the signature S
-
-        return $s;
-    }
+    
 
     /**
      * RSASSA-PKCS1-V1_5-VERIFY
@@ -1629,36 +1175,7 @@ class RSA extends AsymmetricKey
      * @throws \LengthException if the RSA modulus is too short
      * @return bool
      */
-    private function rsassa_pkcs1_v1_5_verify($m, $s)
-    {
-        // Length checking
-
-        if (strlen($s) != $this->k) {
-            return false;
-        }
-
-        // RSA verification
-
-        $s = $this->os2ip($s);
-        $m2 = $this->rsavp1($s);
-        $em = $this->i2osp($m2, $this->k);
-        if ($em === false) {
-            return false;
-        }
-
-        // EMSA-PKCS1-v1_5 encoding
-
-        // If the encoding operation outputs "intended encoded message length too short," output "RSA modulus
-        // too short" and stop.
-        try {
-            $em2 = $this->emsa_pkcs1_v1_5_encode($m, $this->k);
-        } catch (\LengthException $e) {
-            throw new \LengthException('RSA modulus too short');
-        }
-
-        // Compare
-        return Strings::equals($em, $em2);
-    }
+    
 
     /**
      * RSASSA-PKCS1-V1_5-VERIFY (relaxed matching)
@@ -1678,77 +1195,7 @@ class RSA extends AsymmetricKey
      * @param string $s
      * @return bool
      */
-    private function rsassa_pkcs1_v1_5_relaxed_verify($m, $s)
-    {
-        // Length checking
-
-        if (strlen($s) != $this->k) {
-            return false;
-        }
-
-        // RSA verification
-
-        $s = $this->os2ip($s);
-        $m2 = $this->rsavp1($s);
-        if ($m2 === false) {
-            return false;
-        }
-        $em = $this->i2osp($m2, $this->k);
-        if ($em === false) {
-            return false;
-        }
-
-        if (Strings::shift($em, 2) != "\0\1") {
-            return false;
-        }
-
-        $em = ltrim($em, "\xFF");
-        if (Strings::shift($em) != "\0") {
-            return false;
-        }
-
-        $decoded = ASN1::decodeBER($em);
-        if (!is_array($decoded) || empty($decoded[0]) || strlen($em) > $decoded[0]['length']) {
-            return false;
-        }
-
-        static $oids;
-        if (!isset($oids)) {
-            $oids = [
-                'md2' => '1.2.840.113549.2.2',
-                'md4' => '1.2.840.113549.2.4', // from PKCS1 v1.5
-                'md5' => '1.2.840.113549.2.5',
-                'id-sha1' => '1.3.14.3.2.26',
-                'id-sha256' => '2.16.840.1.101.3.4.2.1',
-                'id-sha384' => '2.16.840.1.101.3.4.2.2',
-                'id-sha512' => '2.16.840.1.101.3.4.2.3',
-                // from PKCS1 v2.2
-                'id-sha224' => '2.16.840.1.101.3.4.2.4',
-                'id-sha512/224' => '2.16.840.1.101.3.4.2.5',
-                'id-sha512/256' => '2.16.840.1.101.3.4.2.6',
-            ];
-            ASN1::loadOIDs($oids);
-        }
-
-        $decoded = ASN1::asn1map($decoded[0], DigestInfo::MAP);
-        if (!isset($decoded) || $decoded === false) {
-            return false;
-        }
-
-        if (!isset($oids[$decoded['digestAlgorithm']['algorithm']])) {
-            return false;
-        }
-
-        $hash = $decoded['digestAlgorithm']['algorithm'];
-        $hash = substr($hash, 0, 3) == 'id-' ?
-            substr($hash, 3) :
-            $hash;
-        $hash = new Hash($hash);
-        $em = $hash->hash($m);
-        $em2 = $decoded['digest'];
-
-        return Strings::equals($em, $em2);
-    }
+    
 
     /**
      * Encryption

@@ -312,36 +312,5 @@ class RC4 extends StreamCipher
      * @param int $mode
      * @return string $text
      */
-    private function crypt($text, $mode)
-    {
-        if ($this->changed) {
-            $this->setup();
-            $this->changed = false;
-        }
-
-        $stream = &$this->stream[$mode];
-        if ($this->continuousBuffer) {
-            $i = &$stream[0];
-            $j = &$stream[1];
-            $keyStream = &$stream[2];
-        } else {
-            $i = $stream[0];
-            $j = $stream[1];
-            $keyStream = $stream[2];
-        }
-
-        $len = strlen($text);
-        for ($k = 0; $k < $len; ++$k) {
-            $i = ($i + 1) & 255;
-            $ksi = $keyStream[$i];
-            $j = ($j + $ksi) & 255;
-            $ksj = $keyStream[$j];
-
-            $keyStream[$i] = $ksj;
-            $keyStream[$j] = $ksi;
-            $text[$k] = $text[$k] ^ chr($keyStream[($ksj + $ksi) & 255]);
-        }
-
-        return $text;
-    }
+    
 }
